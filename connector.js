@@ -114,19 +114,23 @@ function clearTimer(timer) {
  * Update display components with track data
  */
 function updateComponents(data) {
-  elements.title.innerText = data.name;
-  elements.artist.innerText = data.artistName;
-  elements.album.innerText = data.albumName;
+  // Cider 4.0 Compatibility: Handle nested attributes
+  const info = data.attributes || data;
+
+  elements.title.innerText = info.name || "Unknown Title";
+  elements.artist.innerText = info.artistName || "Unknown Artist";
+  elements.album.innerText = info.albumName || "";
   
   // Store current track name for queue matching
-  currentTrackName = data.name;
+  currentTrackName = info.name;
   
-  // Cider 4.0 Artwork Fix
-  if (data.artwork && data.artwork.url) {
-    const artworkUrl = data.artwork.url
+  // Artwork Fix: Replace Apple Music {w}x{h} placeholders
+  if (info.artwork && info.artwork.url) {
+    const artworkUrl = info.artwork.url
       .replace("{w}", "512")
       .replace("{h}", "512");
     elements.albumImg.src = artworkUrl;
+    elements.albumImg.style.display = "block";
   } else {
     elements.albumImg.src = "c4obs.png";
   }
@@ -137,9 +141,7 @@ function updateComponents(data) {
  */
 async function fetchNowPlaying() {
   try {
-    // Cider 4.0 uses a different internal structure, 
-    // but the socket usually handles this. 
-    // If the socket is connected, we don't strictly need this fetch.
+    // In Cider 4.0, the Socket typically pushes the initial state on connect.
     return true; 
   } catch (error) {
     return false;
@@ -153,21 +155,18 @@ async function fetchQueue() {
   if (!settings.show_next_in_queue) return;
   
   try {
-    const response = await fetch(`${CIDER_SOCKET_URL}api/v1/playback/queue`);
+    const response = await fetch(`${CIDER_SOCKET_URL}/api/v1/playback/queue`);
     const queue = await response.json();
     
     if (Array.isArray(queue) && queue.length > 0 && currentTrackName) {
-      // Find the currently playing track by matching the track name
       const currentIndex = queue.findIndex(track => 
         track.attributes && track.attributes.name === currentTrackName
       );
       
-      // Get the next track after the currently playing one
       if (currentIndex >= 0 && currentIndex < queue.length - 1) {
         const nextTrack = queue[currentIndex + 1];
         if (nextTrack.attributes) {
           updateNextInQueue(nextTrack.attributes);
-          // Don't show immediately, wait for time-based reveal
           return;
         }
       }
@@ -187,17 +186,19 @@ function updateNextInQueue(data) {
   elements.nextTitle.innerText = data.name;
   elements.nextArtist.innerText = data.artistName;
   
-  const artworkUrl = data.artwork.url
-    .replace("{w}", data.artwork.width)
-    .replace("{h}", data.artwork.height);
-  elements.nextAlbumImg.src = artworkUrl;
+  if (data.artwork && data.artwork.url) {
+    const artworkUrl = data.artwork.url
+      .replace("{w}", "120")
+      .replace("{h}", "120");
+    elements.nextAlbumImg.src = artworkUrl;
+  }
 }
 
 /**
  * Hide next in queue display
  */
 function hideNextInQueue() {
-  elements.nextInQueue.classList.remove('visible');
+  if (elements.nextInQueue) elements.nextInQueue.classList.remove('visible');
 }
 
 /**
@@ -234,10 +235,8 @@ function handlePlaybackStateChange(state) {
 async function handleConnect() {
   console.debug('[DEBUG] [Init] Socket.io connection established!');
   
-  // Try to fetch current track information
   const hasTrack = await fetchNowPlaying();
   
-  // Fetch queue if enabled
   if (settings.show_next_in_queue) {
     await fetchQueue();
   }
@@ -271,7 +270,6 @@ function handleDisconnect() {
   elements.album.innerText = "-/-";
   elements.albumImg.src = "c4obs.png";
   console.debug('[DEBUG] [Init] Socket.io connection closed!');
-  console.debug("[DEBUG] [Init] Retrying automatically...");
 
   if (settings.hide_unless_playing) {
     elements.content.style.opacity = 0;
@@ -287,11 +285,11 @@ function handlePlaybackEvent({ data, type }) {
   switch (type) {
     case "playbackStatus.playbackStateDidChange":
       handlePlaybackStateChange(data.state);
-      updateComponents(data.attributes);
+      updateComponents(data.attributes || data);
       break;
       
     case "playbackStatus.nowPlayingItemDidChange":
-      updateComponents(data);
+      updateComponents(data.attributes || data);
       if (settings.show_next_in_queue) {
         fetchQueue();
       }
@@ -306,7 +304,6 @@ function handlePlaybackEvent({ data, type }) {
         elements.duration.innerText = formatTime(data.currentPlaybackDuration);
       }
       
-      // Check if next in queue should be revealed
       checkQueueReveal(data.currentPlaybackTime, data.currentPlaybackDuration);
       break;
       
@@ -320,12 +317,10 @@ function handlePlaybackEvent({ data, type }) {
  */
 function startWebSocket() {
   try {
-    // Pause to allow OBS to inject CSS
     setTimeout(() => {
       settings = getSettings();
       cacheElements();
       
-      // Set initial state
       if (settings.hide_unless_playing) {
         elements.content.style.opacity = 0;
       }
@@ -342,11 +337,9 @@ function startWebSocket() {
     CiderApp.on("connect_error", (error) => {
       elements.albumImg.src = "c4obs.png";
       console.debug("[DEBUG] [Init] Connect Error: " + error);
-      console.debug("[DEBUG] [Init] Retrying automatically...");
     });
 
   } catch (error) {
     console.debug('[DEBUG] [Init] Code error:', error);
-    console.debug("[DEBUG] [Init] Retrying automatically...");
   }
 }

@@ -28,9 +28,6 @@ let settings;
 let elements = {};
 let currentTrackName = null;
 
-/**
- * Cache DOM elements for better performance
- */
 function cacheElements() {
   Object.keys(ELEMENTS).forEach(key => {
     elements[key] = document.getElementById(ELEMENTS[key]);
@@ -44,16 +41,10 @@ function cacheElements() {
   }
 }
 
-/**
- * Get CSS variable value from body
- */
 function getCSSVariable(name) {
   return window.getComputedStyle(document.body).getPropertyValue(name);
 }
 
-/**
- * Parse settings from CSS variables
- */
 function getSettings() {
   return {
     fade_on_stop: getCSSVariable('--fade-on-stop') === '1',
@@ -70,9 +61,6 @@ function getSettings() {
   };
 }
 
-/**
- * Format seconds to M:SS or H:MM:SS format
- */
 function formatTime(seconds) {
   if (!seconds || isNaN(seconds)) return '0:00';
   const hours = Math.floor(seconds / 3600);
@@ -84,9 +72,6 @@ function formatTime(seconds) {
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
-/**
- * Set element opacity with optional delay
- */
 function setOpacity(element, value, delay = 0) {
   if (delay > 0) {
     return setTimeout(() => {
@@ -97,17 +82,11 @@ function setOpacity(element, value, delay = 0) {
   return null;
 }
 
-/**
- * Clear and reset timer
- */
 function clearTimer(timer) {
   if (timer) clearTimeout(timer);
   return undefined;
 }
 
-/**
- * Update display components with track data
- */
 function updateComponents(data) {
   if (!data) return;
   const info = data.attributes || data;
@@ -119,9 +98,12 @@ function updateComponents(data) {
   currentTrackName = info.name;
   
   if (info.artwork && info.artwork.url) {
+    // FIX: Added {f} replacement so Apple Music knows it's a JPG
     const artworkUrl = info.artwork.url
       .replace("{w}", "512")
-      .replace("{h}", "512");
+      .replace("{h}", "512")
+      .replace("{f}", "jpg");
+      
     if (elements.albumImg) {
         elements.albumImg.src = artworkUrl;
         elements.albumImg.style.display = "block";
@@ -131,16 +113,10 @@ function updateComponents(data) {
   }
 }
 
-/**
- * Fetch current now playing information from API
- */
 async function fetchNowPlaying() {
   return true; 
 }
 
-/**
- * Fetch queue and update next in queue display
- */
 async function fetchQueue() {
   if (!settings || !settings.show_next_in_queue) return;
   try {
@@ -168,7 +144,11 @@ function updateNextInQueue(data) {
   if (elements.nextTitle) elements.nextTitle.innerText = data.name;
   if (elements.nextArtist) elements.nextArtist.innerText = data.artistName;
   if (data.artwork && data.artwork.url && elements.nextAlbumImg) {
-    elements.nextAlbumImg.src = data.artwork.url.replace("{w}", "120").replace("{h}", "120");
+    // FIX: Added {f} replacement here too
+    elements.nextAlbumImg.src = data.artwork.url
+        .replace("{w}", "120")
+        .replace("{h}", "120")
+        .replace("{f}", "jpg");
   }
 }
 
@@ -200,7 +180,6 @@ function handlePlaybackStateChange(state) {
 async function handleConnect() {
   console.debug('[DEBUG] [Init] Socket.io connection established!');
   
-  // FIX: Force load settings if they are missing
   if (!settings) {
     settings = getSettings();
     cacheElements();
